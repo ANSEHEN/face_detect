@@ -1,0 +1,77 @@
+    VideoCapture cap(0);
+	cap.set(CV_CAP_PROP_FRAME_WIDTH, CAM_WIDTH);
+	cap.set(CV_CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT);	
+
+    if(!cap.isOpened()){
+        cerr << "Can't Open Camera" << endl;
+        return -1;
+    }
+
+    namedWindow("Face", 1);
+
+    //cascadeclassifier 클랙스
+    CascadeClassifier face_classifier;
+
+    face_classifier.load("/home/pi/opencv_src/opencv/data/haarcascades/haarcascade_frontalface_default.xml");
+    int test=0;
+    int num_set=0;
+    while(1){
+        bool frame_valid = true;
+
+        Mat frame_original;
+        Mat frame;
+
+        try{
+            //카메라로부터 이미지 얻어오기
+            cap >> frame_original;
+        }catch(Exception& e){
+            cerr << "Execption occurred." << endl;
+            frame_valid = false;
+        }
+
+        if(frame_valid){
+            try{
+                Mat grayframe;
+                //gray scale로 변환
+                cvtColor(frame_original, grayframe, CV_BGR2GRAY);
+                //histogram 얻기
+                equalizeHist(grayframe, grayframe);
+                face_classifier.detectMultiScale(grayframe, faces,
+                    1.1,
+                    3,
+                    0,//CV_HAAR_FIND_BIGGEST_OBJECT | CV_HAAR_SCALE_IMAGE,
+                    Size(30, 30));
+
+
+                for(int i=0;i<faces.size();i++){
+                    Point lb(faces[i].x + faces[i].width,
+                        faces[i].y + faces[i].height);
+                    Point tr(faces[i].x, faces[i].y);
+		    char savefile[100];
+		    cap>>frame;
+		    imshow("frame",frame);
+		    sprintf(savefile,"image%d.jpg",test++);
+		    imwrite(savefile,frame);
+		    std::cout<<num_set<<std::endl;
+                    rectangle(frame_original, lb, tr, Scalar(0, 255, 0), 3, 4, 0);
+		    waitKey(1000);
+		    num_set++;
+		    if(num_set>=8){
+		    	return 0;
+		    }
+		    /*CvCapture* cvCreateCameraCapture(int index);
+		    int cvGrabFrame(CvCapture* capture);
+		    IplImage* cvRetrieveFrame(CvCapture* capture);
+		    void cvRelease(CvCapture*& capture);
+		    */
+                }
+                imshow("Face", frame_original);
+            }catch(Exception& e){
+                cerr << "Exception occurred. face" << endl;
+            }
+            if(waitKey(10) >= 0) break;
+        }
+    }
+
+    return 0;
+}
