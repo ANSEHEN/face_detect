@@ -1,16 +1,155 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui.hpp>
 #include <stdio.h>
-
+#include <signal.h>
+#include <unistd.h>
+#include <thread>
+#include <iostream>
+#include <mutex>
 
 using namespace std;
 using namespace cv;
 
-#define CAM_WIDTH 480
-#define CAM_HEIGHT 300 
-int main(int argc, char *argv[])
-{
+mutex f_mtx;
 
+class Face{
+ private:
+	char* original_face;
+	char* unique_key;
+	int num;
+ public:
+	Face(char* file_path,char* key_value){
+		int len=strlen(file_path)+1;
+		original_face=new char[len];
+		strcpy(original_face,file_path);
+		len=strlen(key_value)+1;
+		unique_key=new char[len];
+		strcpy(unique_key,key_value);
+	}
+	int GetFaceNum(){
+		return num;
+	}
+	void GetNum(int x){
+		num=x;
+	}
+	void NumMinus(){
+		num--;
+	}
+	void AddPicture(char* path){
+		int len=strlen(path)+1;
+	}
+	~Face(){
+		delete []original_face;		
+		delete []unique_key;
+	}
+};
+
+class FaceManager{
+ private:
+	Face* face_data[5];		//관리해주는 사람 얼굴 수
+	char* face_compare[20];		//CCTV에서 검출된 얼굴 수
+	int data_count;		//관리 얼굴 총 갯수
+	int compare_count;	//비교 얼굴 총 갯수
+ public:
+	FaceManager():data_count(0),compare_count(0){}
+	int GetCompare_count(){
+		return compare_count;
+	}
+	void AddFace(Face* face){
+		f_mtx.lock();		//face_data에 접근하는 뮤텍스
+		face->GetNum(data_count);
+		face_data[data_count++]=face;
+		f_mtx.unlock();
+	}
+	void AddCompareFace(char* path){
+		int len=strlen(path)+1;
+		face_compare[compare_count]=new char[len];
+		strcpy(face_compare[compare_count],path);
+		compare_count++;
+	}
+	void RemoveData(Face* face){ //mutex걸어야함
+		int select_num=face->GetFaceNum();	//지울때 선택하는 번호
+		face_data[select_num]->~Face();
+		if(data_count>1 && select_num != (data_count-1)){
+			int i;
+			f_mtx.lock();
+			for(i=select_num; i<(data_count-1); i++){
+				face_data[i+1]->NumMinus();
+				face_data[i]=face_data[i+1];
+			}
+			f_mtx.unlock();
+		}
+		data_count--;
+	}
+	void CompareFace(){	//thread 생성해서 작동
+		int i,j;
+		for(i=0;i<data_count;i++){
+			for(j=0;j<compare_count;j++){
+				bool tf=true; //얼굴 비교 확인용 (참으로 가정)
+				/*
+				외부 솔루션을 통한 얼굴 비교
+				*/
+				if(tf){	//i,j가 같은 얼굴이라고 들어온 경우
+					//socket을 통하여 face_data[i] 데이터 전송 이때도 mutex 걸어야함
+					RemoveData(face_data[i]);
+				}
+			}
+		}
+		compare_count=0;
+	}
+};
+class TimeManagement{
+ private:
+	clock_t start;
+	clock_t end;
+ public:
+	TimeManagement(){}
+	void TimeStart(){
+		start=clock();
+	}
+	int TimeEnd(){
+		if(start!=0){
+			int time;
+			end=clock();
+			time=((int)(end-start)/1000000);
+			cout<<"start: "<<start<<endl;
+			cout<<"end: "<<end<<endl;
+			cout<<"Time: "<<time<<endl;
+			return time;
+		}
+	}
+};
+void dataReceive(FaceManager* fm){
+	/*
+	socket을 통해서 큰 보드에서 사진경로와 키값 데이터를 받는 소스를 구현
+	*/
+
+	//임시 코드
+	int i=0;
+	cout<<"thread create"<<endl;
+	char face_path[]="/home/pi/ansehen/lee_face.jpg";
+	char key[]="0123456789";
+	Face* leeho = new Face(face_path,key);
+	cout<<"object created!"<<endl;
+	fm->AddFace(leeho);
+	cout<<"add leeho"<<endl;
+	//thread로 socket을 통해 데이터(original_face+unique_key)를 받는 부분
+	while(i<1000000000){
+		i++;
+	}
+	cout<<"thread end"<<endl;
+	cout<<"---------------------------"<<endl;
+}
+#define CAM_WIDTH 480
+#define CAM_HEIGHT 300
+//int face_num=0;
+//int count_num=0;
+//int image_num=0;
+
+FaceManager* fm=new FaceManager;
+TimeManagement timer;
+int main()
+{
     VideoCapture cap(0);
 	cap.set(CV_CAP_PROP_FRAME_WIDTH, CAM_WIDTH);
 	cap.set(CV_CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT);	
@@ -26,24 +165,20 @@ int main(int argc, char *argv[])
     CascadeClassifier face_classifier;
 
     //얼굴 인식 xml 로딩
+    thread face_receive(&dataReceive,fm);
     face_classifier.load("/home/pi/opencv_src/opencv/data/haarcascades/haarcascade_frontalface_default.xml");
-    int test=0;
-    int num_set=0;
     while(1){
-        bool frame_valid = true;
-
         Mat frame_original;
         Mat frame;
-
+	Mat face_image;
         try{
             //카메라로부터 이미지 얻어오기
             cap >> frame_original;
         }catch(Exception& e){
             cerr << "Execption occurred." << endl;
-            frame_valid = false;
         }
 
-        if(frame_valid){
+        if(1){
             try{
                 Mat grayframe;
                 //gray scale로 변환
@@ -76,8 +211,8 @@ int main(int argc, char *argv[])
                     3,
                     0,//CV_HAAR_FIND_BIGGEST_OBJECT | CV_HAAR_SCALE_IMAGE,
                     Size(30, 30));
-
-
+		cout<<"얼굴 인식 전"<<endl;
+		timer.TimeEnd();
                 for(int i=0;i<faces.size();i++){
                     Point lb(faces[i].x + faces[i].width,
                         faces[i].y + faces[i].height);
@@ -91,33 +226,45 @@ int main(int argc, char *argv[])
 //lineType 라인의 모양 line()함수 확인하기
 //shift ?? Number of fractional bits in the point coordinates.
 //포인트 좌표의 분수 비트의 수??
+		    cout<<"얼굴 확인 됨"<<endl;
+
+		    timer.TimeStart();
+
 		    char savefile[100];
 		    cap>>frame;
-		    imshow("frame",frame);
-		    sprintf(savefile,"image%d.jpg",test++);
-		    imwrite(savefile,frame);
-		    std::cout<<num_set<<std::endl;
-                    rectangle(frame_original, lb, tr, Scalar(0, 255, 0), 3, 4, 0);
-		    waitKey(1000);
-		    num_set++;
-		    if(num_set>=8){
-		    	return 0;
+		    cap>>face_image;
+		    Rect rect(tr.x,tr.y,(lb.x-tr.x)+10,(lb.y-tr.y)+10);
+		    face_image=face_image(rect);
+		    //imshow("image",face_image);
+		    int compare_face_num=fm->GetCompare_count();
+		    sprintf(savefile,"face_image %d.jpg",compare_face_num);
+		    
+		    char compare_path[]="/home/pi/ansehen/";
+		    strcat(compare_path,savefile);
+		    fm->AddCompareFace(compare_path);   
+		    cout<<savefile<<endl;
+		
+		    imwrite(savefile,face_image);
+		    imshow("CCTV",frame);
+		    if(compare_face_num>5){
+			cout<<"compare start!!"<<endl;
+			//thread compareFace(&);
 		    }
-		    /*CvCapture* cvCreateCameraCapture(int index);
-		    int cvGrabFrame(CvCapture* capture);
-		    IplImage* cvRetrieveFrame(CvCapture* capture);
-		    void cvRelease(CvCapture*& capture);
-		    */
+		    //sprintf(savefile,"image %d_%d.jpg",face_num,count_num++);
+		    //imwrite(savefile,frame);
+                    rectangle(frame_original, lb, tr, Scalar(0, 255, 0), 3, 4, 0);
+		    waitKey(500);
                 }
 //윈도우에 이미지 그리기
                 imshow("Face", frame_original);
             }catch(Exception& e){
+
                 cerr << "Exception occurred. face" << endl;
             }
 //키 입력 대기
             if(waitKey(10) >= 0) break;
         }
     }
-
+    face_receive.join();
     return 0;
 }
