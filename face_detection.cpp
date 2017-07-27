@@ -11,7 +11,6 @@ using namespace std;
 using namespace cv;
 
 mutex f_mtx;
-int a;
 class Face{
  private:
 	char* original_face;
@@ -26,21 +25,26 @@ class Face{
 		unique_key=new char[len];
 		strcpy(unique_key,key_value);
 	}
+	/*
 	int GetFaceNum(){
 		return num;
 	}
+	*/
 	void GetNum(int x){
 		num=x;
 	}
 	void NumMinus(){
 		num--;
 	}
+	/*
 	void AddPicture(char* path){
 		int len=strlen(path)+1;
 	}
+	*/
 	~Face(){
-		delete []original_face;		
-		delete []unique_key;
+		delete original_face;
+		delete unique_key;
+		cout<<"Face Delete"<<endl;
 	}
 };
 
@@ -52,23 +56,34 @@ class FaceManager{
 	int compare_count;	//비교 얼굴 총 갯수
  public:
 	FaceManager():data_count(0),compare_count(0){}
-	int GetCompare_count(){
+	~FaceManager(){
+		int i;
+		for(i=0;i<compare_count;i++){
+			delete face_compare[i];
+		}
+	}
+	int GetCompareCount(){
 		return compare_count;
+	}
+	int GetDataCount(){
+		return data_count;
 	}
 	void AddFace(Face* face){
 		f_mtx.lock();		//face_data에 접근하는 뮤텍스
 		face->GetNum(data_count);
 		face_data[data_count++]=face;
 		f_mtx.unlock();
+		cout<<"Face add: "<<data_count<<endl;
 	}
 	void AddCompareFace(char* path){
 		int len=strlen(path)+1;
 		face_compare[compare_count]=new char[len];
 		strcpy(face_compare[compare_count],path);
 		compare_count++;
+		cout<<"Compare Face: "<<compare_count<<endl;
 	}
-	void RemoveData(Face* face){ //mutex걸어야함
-		int select_num=face->GetFaceNum();	//지울때 선택하는 번호
+	void RemoveData(int face_num){ //mutex걸어야함
+		int select_num=face_num;	//지울때 선택하는 번호
 		face_data[select_num]->~Face();
 		if(data_count>1 && select_num != (data_count-1)){
 			int i;
@@ -80,23 +95,49 @@ class FaceManager{
 			f_mtx.unlock();
 		}
 		data_count--;
+		cout<<"FaceData delete"<<endl;
 	}
+	void CompareFaceInit(){
+		int i;
+		cout<<"compare_face_data Delete"<<endl;
+		f_mtx.lock();
+		for(i=0;i<compare_count;i++){
+			//cout<<"delete 실행 전"<<endl;
+			delete face_compare[i];
+			//cout<<"delete 실행 후"<<endl;
+		}
+		cout<<"실행 완료"<<endl;
+		compare_count=0;
+		f_mtx.unlock();
+	}
+	/*
+	~FaceManager(){
+		int i;
+		for(i=0;i<compare_count;i++){
+			delete face_compare;
+		}
+	}
+	*/
+/*
 	void CompareFace(){	//thread 생성해서 작동
 		int i,j;
 		for(i=0;i<data_count;i++){
 			for(j=0;j<compare_count;j++){
 				bool tf=true; //얼굴 비교 확인용 (참으로 가정)
-				/*
-				외부 솔루션을 통한 얼굴 비교
-				*/
+				//
+				//외부 솔루션을 통한 얼굴 비교
+				//
 				if(tf){	//i,j가 같은 얼굴이라고 들어온 경우
 					//socket을 통하여 face_data[i] 데이터 전송 이때도 mutex 걸어야함
 					RemoveData(face_data[i]);
 				}
 			}
 		}
+		CompareFaceInit();
 		compare_count=0;
+
 	}
+*/
 };
 class TimeManagement{
  private:
@@ -114,8 +155,6 @@ class TimeManagement{
 			int time;
 			end=clock();
 			time=((int)(end-start)/1000000);
-			cout<<"start: "<<start<<endl;
-			cout<<"end: "<<end<<endl;
 			cout<<"Time: "<<time<<endl;
 			return time;
 		}
@@ -143,6 +182,30 @@ void dataReceive(FaceManager* fm){
 	cout<<"thread end"<<endl;
 	cout<<"---------------------------"<<endl;
 }
+void KairosCommunication(FaceManager* fm){ //타이머 종료, 일정 사진이 찍힌경우
+	int i,j;
+	int i_max=fm->GetDataCount();
+	int j_max=fm->GetCompareCount();
+	cout<<"i_max: "<<i_max<<", j_max: "<<j_max<<endl;
+	bool tf=true;
+	for(i=0; i<i_max;i++){
+		cout<<"i: "<<i<<endl;
+		for(j=0;j<j_max;j++){
+			cout<<"j: "<<j<<endl;
+			/*
+			외부 솔루션을 통한 해결(kairos)
+			*/
+			if(tf){
+				cout<<"exe. in if"<<endl;
+				//socket을 통하여 face_data[i] 데이터 전송
+				fm->RemoveData(i);
+				//tf=false;
+				break;
+			}
+		}
+	}
+	fm->CompareFaceInit();
+}
 #define CAM_WIDTH 480
 #define CAM_HEIGHT 300
 //int face_num=0;
@@ -155,7 +218,7 @@ int main()
 {
     VideoCapture cap(0);
 	cap.set(CV_CAP_PROP_FRAME_WIDTH, CAM_WIDTH);
-	cap.set(CV_CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT);	
+	cap.set(CV_CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT);
 
     if(!cap.isOpened()){
         cerr << "Can't Open Camera" << endl;
@@ -219,6 +282,8 @@ int main()
 			timer.TimeStartReset();
 			cout<<"Time out"<<endl;
 			cout<<"compare start!!"<<endl;
+			thread faceTimeComparison(&KairosCommunication,fm);
+			faceTimeComparison.join();
 			//얼굴비교 시작
 		}
                 for(int i=0;i<faces.size();i++){
@@ -244,12 +309,12 @@ int main()
 		    Rect rect(tr.x,tr.y,(lb.x-tr.x)+10,(lb.y-tr.y)+10);
 		    face_image=face_image(rect);
 		    //imshow("image",face_image);
-		    int compare_face_num=fm->GetCompare_count();
+		    int compare_face_num=fm->GetCompareCount();
 		    sprintf(savefile,"face_image %d.jpg",compare_face_num);
 		    
 		    char compare_path[]="/home/pi/ansehen/";
 		    strcat(compare_path,savefile);
-		    fm->AddCompareFace(compare_path);   
+		    fm->AddCompareFace(compare_path);
 		    cout<<savefile<<endl;
 		
 		    imwrite(savefile,face_image);
@@ -257,7 +322,8 @@ int main()
 		    if(compare_face_num>5){
 			timer.TimeStartReset();
 			cout<<"compare start!!"<<endl;
-			//thread compareFace(&);
+			thread faceComparison(&KairosCommunication,fm);
+			faceComparison.join();
 		    }
 		    //sprintf(savefile,"image %d_%d.jpg",face_num,count_num++);
 		    //imwrite(savefile,frame);
