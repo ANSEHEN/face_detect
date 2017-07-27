@@ -11,7 +11,7 @@ using namespace std;
 using namespace cv;
 
 mutex f_mtx;
-
+int a;
 class Face{
  private:
 	char* original_face;
