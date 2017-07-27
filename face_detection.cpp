@@ -103,7 +103,9 @@ class TimeManagement{
 	clock_t start;
 	clock_t end;
  public:
-	TimeManagement(){}
+	void TimeStartReset(){
+		start=0;
+	}
 	void TimeStart(){
 		start=clock();
 	}
@@ -117,6 +119,7 @@ class TimeManagement{
 			cout<<"Time: "<<time<<endl;
 			return time;
 		}
+		return 0;
 	}
 };
 void dataReceive(FaceManager* fm){
@@ -212,7 +215,12 @@ int main()
                     0,//CV_HAAR_FIND_BIGGEST_OBJECT | CV_HAAR_SCALE_IMAGE,
                     Size(30, 30));
 		cout<<"얼굴 인식 전"<<endl;
-		timer.TimeEnd();
+		if(timer.TimeEnd()>5){
+			timer.TimeStartReset();
+			cout<<"Time out"<<endl;
+			cout<<"compare start!!"<<endl;
+			//얼굴비교 시작
+		}
                 for(int i=0;i<faces.size();i++){
                     Point lb(faces[i].x + faces[i].width,
                         faces[i].y + faces[i].height);
@@ -247,6 +255,7 @@ int main()
 		    imwrite(savefile,face_image);
 		    imshow("CCTV",frame);
 		    if(compare_face_num>5){
+			timer.TimeStartReset();
 			cout<<"compare start!!"<<endl;
 			//thread compareFace(&);
 		    }
