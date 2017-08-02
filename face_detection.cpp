@@ -7,10 +7,25 @@
 #include <iostream>
 #include <mutex>
 
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/types.h>
+
 using namespace std;
 using namespace cv;
 
 mutex f_mtx;
+
+class mbuf {
+	public :
+	long mtype;
+	char buf[100];
+	char unique_key[100];
+	char image_addr[200];
+	int signal;
+};
+const int type = 1;
+
 class Face{
  private:
 	char* original_face;
@@ -135,7 +150,6 @@ class FaceManager{
 		}
 		CompareFaceInit();
 		compare_count=0;
-
 	}
 */
 };
@@ -214,8 +228,25 @@ void KairosCommunication(FaceManager* fm){ //타이머 종료, 일정 사진이 
 
 FaceManager* fm=new FaceManager;
 TimeManagement timer;
+
+
 int main()
 {
+    printf("msg wait\n");
+    
+    int msqid;
+    mbuf msg;
+
+    //msg 받는 부분
+    if(-1 == (msqid = msgget((key_t)1234, IPC_CREAT|0666)))
+	{
+		perror("msgget() 실패");
+		return 1;
+	}
+
+    msgrcv(msqid, (void*)&msg, sizeof(msg), type, 0);
+    printf("start capture\n");
+
     VideoCapture cap(0);
 	cap.set(CV_CAP_PROP_FRAME_WIDTH, CAM_WIDTH);
 	cap.set(CV_CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT);
@@ -230,7 +261,8 @@ int main()
     //cascadeclassifier 클랙스
     CascadeClassifier face_classifier;
 
-    //얼굴 인식 xml 로딩
+ 
+        //얼굴 인식 xml 로딩
     thread face_receive(&dataReceive,fm);
     face_classifier.load("/home/pi/opencv_src/opencv/data/haarcascades/haarcascade_frontalface_default.xml");
     while(1){
