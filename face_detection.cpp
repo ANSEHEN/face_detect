@@ -7,25 +7,10 @@
 #include <iostream>
 #include <mutex>
 
-#include <sys/ipc.h>
-#include <sys/msg.h>
-#include <sys/types.h>
-
 using namespace std;
 using namespace cv;
 
 mutex f_mtx;
-
-class mbuf {
-	public :
-	long mtype;
-	char buf[100];
-	char unique_key[100];
-	char image_addr[200];
-	int signal;
-};
-const int type = 1;
-
 class Face{
  private:
 	char* original_face;
@@ -150,6 +135,7 @@ class FaceManager{
 		}
 		CompareFaceInit();
 		compare_count=0;
+
 	}
 */
 };
@@ -228,25 +214,8 @@ void KairosCommunication(FaceManager* fm){ //타이머 종료, 일정 사진이 
 
 FaceManager* fm=new FaceManager;
 TimeManagement timer;
-
-
 int main()
 {
-    printf("msg wait\n");
-    
-    int msqid;
-    mbuf msg;
-
-    //msg 받는 부분
-    if(-1 == (msqid = msgget((key_t)1234, IPC_CREAT|0666)))
-	{
-		perror("msgget() 실패");
-		return 1;
-	}
-
-    msgrcv(msqid, (void*)&msg, sizeof(msg), type, 0);
-    printf("start capture\n");
-
     VideoCapture cap(0);
 	cap.set(CV_CAP_PROP_FRAME_WIDTH, CAM_WIDTH);
 	cap.set(CV_CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT);
@@ -261,8 +230,7 @@ int main()
     //cascadeclassifier 클랙스
     CascadeClassifier face_classifier;
 
- 
-        //얼굴 인식 xml 로딩
+    //얼굴 인식 xml 로딩
     thread face_receive(&dataReceive,fm);
     face_classifier.load("/home/pi/opencv_src/opencv/data/haarcascades/haarcascade_frontalface_default.xml");
     while(1){
@@ -310,7 +278,7 @@ int main()
                     0,//CV_HAAR_FIND_BIGGEST_OBJECT | CV_HAAR_SCALE_IMAGE,
                     Size(30, 30));
 		cout<<"얼굴 인식 전"<<endl;
-		if(timer.TimeEnd()>5){
+		if(timer.TimeEnd()>100){
 			timer.TimeStartReset();
 			cout<<"Time out"<<endl;
 			cout<<"compare start!!"<<endl;
@@ -338,7 +306,7 @@ int main()
 		    char savefile[100];
 		    cap>>frame;
 		    cap>>face_image;
-		    Rect rect(tr.x,tr.y,(lb.x-tr.x)+10,(lb.y-tr.y)+10);
+		    Rect rect(tr.x,tr.y,(lb.x-tr.x)*(1.5),(lb.y-tr.y)*1.5);
 		    face_image=face_image(rect);
 		    //imshow("image",face_image);
 		    int compare_face_num=fm->GetCompareCount();
@@ -351,7 +319,7 @@ int main()
 		
 		    imwrite(savefile,face_image);
 		    imshow("CCTV",frame);
-		    if(compare_face_num>5){
+		    if(compare_face_num>100){
 			timer.TimeStartReset();
 			cout<<"compare start!!"<<endl;
 			thread faceComparison(&KairosCommunication,fm);
