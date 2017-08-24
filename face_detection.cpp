@@ -135,7 +135,6 @@ class FaceManager{
 		}
 		CompareFaceInit();
 		compare_count=0;
-
 	}
 */
 };
@@ -302,13 +301,16 @@ int main()
 		    cout<<"얼굴 확인 됨"<<endl;
 
 		    timer.TimeStart();
-
 		    char savefile[100];
 		    cap>>frame;
 		    cap>>face_image;
-		    Rect rect(tr.x,tr.y,(lb.x-tr.x)*(1.5),(lb.y-tr.y)*1.5);
+		    tr.x=tr.x-(lb.x-tr.x)*(0.2);
+		    tr.y=tr.y-(lb.y-tr.y)*(0.3);
+		    lb.x=lb.x+(lb.x-tr.x)*(0.2);
+		    lb.y=lb.y+(lb.y-tr.y)*(0.3);
+		    Rect rect(tr.x,tr.y,lb.x-tr.x,lb.y-tr.y);
 		    face_image=face_image(rect);
-		    //imshow("image",face_image);
+		    imshow("image",face_image);
 		    int compare_face_num=fm->GetCompareCount();
 		    sprintf(savefile,"face_image %d.jpg",compare_face_num);
 		    
